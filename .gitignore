@@ -1,0 +1,17 @@
+# Credenciais. O exemplo entra no repositório; o arquivo real não.
+.env
+.env.*
+!.env.exemplo
+*.pem
+credentials.json
+
+# Ambiente e cache
+.venv/
+venv/
+__pycache__/
+*.pyc
+.adk/
+
+# Sistema
+.DS_Store
+Thumbs.db
