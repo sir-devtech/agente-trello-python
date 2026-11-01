@@ -1,34 +1,45 @@
 # Agente de tarefas no Trello
 
-Agente em Python que organiza as tarefas do dia num quadro do Trello, a partir de uma conversa. Ele usa o Agent Development Kit (ADK) do Google e o modelo Gemini. Cada ação é uma função Python registrada como ferramenta.
+Montei um agente em Python que conversa comigo e joga as tarefas do dia num quadro do Trello. Usei o Agent Development Kit do Google com o Gemini. A ideia é essa: cada função do `agent.py` vira uma ferramenta, e o modelo escolhe qual chamar a partir do que eu escrevo.
 
-O quadro usado na configuração de exemplo se chama **DIO** e tem as listas **A fazer**, **Em andamento** e **Concluído**.
+O quadro se chama **DIO**. As listas são **A fazer**, **Em andamento** e **Concluído**.
 
-## Ferramentas
+## O que ele faz na conversa
 
-| Ferramenta | O que faz |
-| --- | --- |
-| `get_temporal_context` | Informa a data e a hora atuais no fuso de Brasília (UTC-3). A conversa começa perguntando as tarefas do dia já com essa data. |
-| `adicionar_tarefa` | Cria um card em **A fazer**, com nome, descrição e vencimento. |
-| `listar_tarefas` | Lista todos os cards ou só os de um status. |
-| `mudar_status_tarefa` | Move o card entre **A fazer**, **Em andamento** e **Concluído**. |
+Ele começa pedindo a data de agora, no fuso de Brasília, e pergunta o que eu tenho para fazer. Cada tarefa vira um card em **A fazer**, com nome, descrição e vencimento. Se eu pedir para ver o quadro, ele lista tudo ou só um status. Se eu contar que terminei alguma coisa, ele move o card. Dá para falar **concluído** com acento.
 
-## Melhoria
+As ferramentas estão no `agenttaskmanager/agent.py`:
 
-O código de partida gravava o vencimento só com o dia. O Trello interpreta isso como meia-noite em UTC, e no Brasil o card aparecia no dia anterior. A ferramenta `adicionar_tarefa` agora envia a data ao meio-dia com o fuso `-03:00`, então o card fica no dia certo.
+- `get_temporal_context` pega data e hora
+- `adicionar_tarefa` cria o card
+- `listar_tarefas` lê o quadro
+- `mudar_status_tarefa` muda o card de lista
 
-A outra correção é o status. `concluído`, `concluida`, `done` e as outras formas deixam de cair em "status inválido". A comparação ignora acento e maiúsculas, tanto ao listar quanto ao mover. A conexão com o Trello ficou numa função só, e cada ferramenta devolve o erro em texto em vez de quebrar a conversa.
+## O que eu ajustei
 
-A instrução do agente descreve só o que as ferramentas fazem de verdade: criar, listar e mover. Ela não promete apagar tarefa.
+O código da aula mandava a data só como `AAAA-MM-DD`. O Trello entende isso como meia-noite em UTC. No Brasil, UTC-3, o card nascia no dia anterior. A função `_vencimento_com_fuso` manda a mesma data ao meio-dia, com o offset `-03:00`. No teste de 1 de novembro os dois cards ficaram em **1 de nov.**, que foi o dia que eu falei.
 
-## Como configurar
+A outra quebra era o status. O original só aceitava `concluido`, sem acento. `concluído` voltava status inválido e a conversa em português travava na hora de mover. Agora a comparação tira o acento antes de achar a lista. Vale para listar e para mover.
 
-É preciso Python 3.10 ou superior, uma conta no Trello e uma chave gratuita do Gemini no [Google AI Studio](https://aistudio.google.com/apikey).
+A conexão com o `py-trello` estava repetida dentro de cada função. Deixei isso em `_conectar_trello`. As ferramentas também têm `try/except` e devolvem o erro em texto, então uma chave faltando ou um quadro com outro nome não derruba o `adk web`.
 
-1. No Trello, crie um quadro com as listas **A fazer**, **Em andamento** e **Concluído**.
-2. Em [trello.com/power-ups/admin](https://trello.com/power-ups/admin), crie um aplicativo e anote a chave e o segredo.
-3. Autorize um token em `https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=SUA_CHAVE` e clique em Permitir.
-4. Copie `agenttaskmanager/.env.exemplo` para `agenttaskmanager/.env` e preencha a chave do Gemini, a chave, o segredo e o token do Trello. Se o quadro não se chamar DIO, mude `TRELLO_BOARD_NAME`.
+A instrução do agente, no material, prometia apagar tarefa. Essa função não existe. Tirei a frase. O texto que o Gemini lê agora só descreve criar, listar e mover.
+
+O modelo do material era o `gemini-2.5-flash`. Na chave nova a API respondeu que ele não está mais disponível para conta nova. Troquei para `gemini-3.5-flash`, que foi o que respondeu no teste.
+
+## Como eu subi
+
+Python 3.13, com ambiente virtual.
+
+No Trello criei o quadro **DIO** e um aplicativo em [trello.com/power-ups/admin](https://trello.com/power-ups/admin). Anotei a chave e o segredo, e gerei o token nesta URL, trocando `SUA_CHAVE`:
+
+```
+https://trello.com/1/authorize?expiration=never&name=AgenteTrelloDIO&scope=read,write&response_type=token&key=SUA_CHAVE
+```
+
+A chave do Gemini veio do [AI Studio](https://aistudio.google.com/apikey).
+
+Copiei `agenttaskmanager/.env.exemplo` para `agenttaskmanager/.env` e preenchi. O `.env` está no `.gitignore`. No GitHub só entra o exemplo, com texto falso no lugar das chaves. Se o quadro tiver outro nome, muda `TRELLO_BOARD_NAME`.
 
 ```bash
 python -m venv .venv
@@ -37,21 +48,16 @@ pip install -r requirements.txt
 adk web
 ```
 
-No Linux ou no macOS, o ativador é `source .venv/bin/activate`. O `adk web` abre a conversa no navegador. Escolha o agente `agenttaskmanager`.
+No navegador, o agente é o `agenttaskmanager`.
 
-## Credenciais
+## O teste
 
-Chave, segredo e token ficam somente no `agenttaskmanager/.env`. Esse arquivo está no `.gitignore` e não entra no repositório. O `.env.exemplo` traz só texto de exemplo. Troque o token no Trello se ele tiver sido compartilhado.
+No `adk web` eu falei a tarefa **estudar Python**, com a descrição de revisar as funções do agente, no dia 1 de novembro de 2026. O agente chamou `get_temporal_context` e `adicionar_tarefa`. Depois pedi a lista e mandei marcar como concluído. Ele chamou `mudar_status_tarefa` e `listar_tarefas`.
 
-## Como testar
+No quadro, **A fazer** e **Em andamento** ficaram vazias. **Concluído** ficou com **Comprar comida** e **estudar Python**, os dois em 1 de novembro.
 
-1. Suba o `adk web` e abra o quadro ao lado.
-2. Diga as tarefas do dia e confira um card novo em **A fazer**, com o vencimento no dia certo.
-3. Peça a lista de tarefas.
-4. Diga que uma tarefa foi concluída, usando a palavra com acento, e confira o card em **Concluído**.
+![Conversa no adk web](evidencias/conversa-adk.png)
 
-O teste feito em 1 de novembro de 2026 pediu a tarefa **estudar Python** e, em seguida, a lista com o status **concluído**. O vencimento ficou em 1 de novembro, o dia informado, e os dois cards apareceram na lista **Concluído**.
+![Quadro DIO depois do teste](evidencias/quadro-trello.png)
 
-![Conversa no adk web criando, movendo e listando as tarefas](evidencias/conversa-adk.png)
-
-![Quadro DIO com os cards em Concluído no dia 1 de novembro](evidencias/quadro-trello.png)
+O nome do card precisa ser o mesmo na hora de mover. Se eu falar um nome parecido, ele não acha. Também não apaga card. Isso eu deixei de fora de propósito, porque a ferramenta não existe.
